@@ -1,0 +1,253 @@
+import React, { useState } from "react";
+import { Upload, FileType, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { maskCPF } from "../lib/utils";
+
+import { CourseType, Partner } from "../types";
+
+interface RequestFormProps {
+  partner: Partner;
+}
+
+export default function RequestForm({ partner }: RequestFormProps) {
+  const [studentName, setStudentName] = useState("");
+  const [studentCpf, setStudentCpf] = useState("");
+  const [courseType, setCourseType] = useState<CourseType | "">("");
+  const [files, setFiles] = useState<{ [key: string]: File | null }>({
+    civilRegistry: null, // Certidão de nascimento/casamento
+    identity: null, // RG e CPF
+    addressProof: null, // Comprovante de endereço
+    previousDegree: null, // Diploma da graduação anterior
+    previousTranscript: null, // Histórico da graduação anterior
+    highSchoolTranscript: null, // Histórico do ensino médio
+    paymentProof: null, // Comprovante de Pagamento
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  const handleFileChange = (key: string, file: File | null) => {
+    setFiles((prev) => ({ ...prev, [key]: file }));
+  };
+
+  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setStudentCpf(maskCPF(e.target.value));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log("[RequestForm] Iniciando submissão de formulário.");
+    setIsSubmitting(true);
+    setSubmitStatus(null);
+
+    // Validação básica
+    if (!studentName.trim() || studentCpf.length < 14 || !courseType) {
+      console.warn("[RequestForm] Validação local falhou (nome, CPF ou curso incompleto).");
+      setSubmitStatus({ type: "error", message: "Por favor, preencha todos os campos obrigatórios." });
+      setIsSubmitting(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("student_name", studentName);
+    formData.append("student_cpf", studentCpf);
+    formData.append("course_type", courseType);
+    formData.append("partner_id", partner.id);
+
+    // Anexa arquivos. Pula o comprovante de pagamento se não for obrigatório e não foi anexado.
+    for (const [key, file] of Object.entries(files)) {
+      if (file) {
+        // Nome padronizado para o back-end processar
+        formData.append(`file_${key}`, file, file.name);
+      } else {
+        if (key === "paymentProof" && !partner.require_payment_proof) continue;
+        console.warn(`[RequestForm] Documento ausente: ${key}`);
+        setSubmitStatus({ type: "error", message: "Todos os documentos obrigatórios devem ser anexados." });
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    try {
+      console.log(`[RequestForm] Enviando payload via FormData para /api/upload... (Total de chaves no form: ${Array.from(formData.keys()).length})`);
+      
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData, // fetch define boundary e multipart/form-data automaticamente
+      });
+
+      console.log(`[RequestForm] Resposta recebida. Status: ${response.status}`);
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Falha ao enviar os dados.");
+      }
+
+      console.log("[RequestForm] Upload concluído com sucesso:", data);
+      
+      setSubmitStatus({ type: "success", message: "Solicitação enviada com sucesso! Você pode acompanhar pelo painel." });
+      // Resetar form (opcional)
+      setStudentName("");
+      setStudentCpf("");
+      setCourseType("");
+      setFiles({
+        civilRegistry: null, identity: null, addressProof: null,
+        previousDegree: null, previousTranscript: null, highSchoolTranscript: null, paymentProof: null,
+      });
+
+    } catch (error) {
+      console.error("[RequestForm] Exceção capturada no catch:", error);
+      setSubmitStatus({ type: "error", message: error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao enviar." });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const fileInputConfig = [
+    { key: "civilRegistry", label: "Certidão de Nascimento/Casamento (PDF)", required: true },
+    { key: "identity", label: "RG e CPF (PDF)", required: true },
+    { key: "addressProof", label: "Comprovante de Endereço (PDF)", required: true },
+    { key: "previousDegree", label: "Diploma da Graduação Anterior (PDF)", required: true },
+    { key: "previousTranscript", label: "Histórico da Graduação Anterior (PDF)", required: true },
+    { key: "highSchoolTranscript", label: "Histórico do Ensino Médio (PDF)", required: true },
+  ];
+
+  if (partner.require_payment_proof) {
+    fileInputConfig.push({ key: "paymentProof", label: "Comprovante de Pagamento (PDF)", required: true });
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 md:p-8">
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold text-gray-900">Nova Solicitação de Emissão</h2>
+        <p className="text-gray-500 mt-1">
+          Preencha os dados do aluno e anexe todos os documentos em formato PDF.
+        </p>
+      </div>
+
+      {submitStatus && (
+        <div className={`mb-6 p-4 rounded-md flex items-start gap-3 ${
+          submitStatus.type === "success" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"
+        }`}>
+          {submitStatus.type === "success" ? (
+            <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+          )}
+          <p className="text-sm font-medium">{submitStatus.message}</p>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="space-y-2">
+            <label htmlFor="studentName" className="block text-sm font-medium text-gray-700">
+              Nome Completo do Aluno <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="studentName"
+              type="text"
+              required
+              value={studentName}
+              onChange={(e) => setStudentName(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+              placeholder="Ex: João da Silva"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="studentCpf" className="block text-sm font-medium text-gray-700">
+              CPF do Aluno <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="studentCpf"
+              type="text"
+              required
+              maxLength={14}
+              value={studentCpf}
+              onChange={handleCpfChange}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+              placeholder="000.000.000-00"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="courseType" className="block text-sm font-medium text-gray-700">
+              Tipo de Curso <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="courseType"
+              required
+              value={courseType}
+              onChange={(e) => setCourseType(e.target.value as CourseType)}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+            >
+              <option value="" disabled>Selecione um curso...</option>
+              {partner.authorized_courses?.map((course) => (
+                <option key={course} value={course}>{course}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="pt-6 border-t border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Documentação (Upload)</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {fileInputConfig.map((config) => (
+              <div key={config.key} className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {config.label}
+                  {config.required && <span className="text-red-500 ml-1">*</span>}
+                </label>
+                <div className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md transition-colors ${
+                  files[config.key] ? "border-blue-300 bg-blue-50" : "border-gray-300 hover:bg-gray-50"
+                }`}>
+                  <div className="space-y-1 text-center">
+                    {files[config.key] ? (
+                      <FileType className="mx-auto h-8 w-8 text-blue-500" />
+                    ) : (
+                      <Upload className="mx-auto h-8 w-8 text-gray-400" />
+                    )}
+                    
+                    <div className="flex text-sm text-gray-600 justify-center">
+                      <label htmlFor={`file-upload-${config.key}`} className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                        <span>{files[config.key] ? "Trocar arquivo" : "Fazer upload"}</span>
+                        <input
+                          id={`file-upload-${config.key}`}
+                          name={`file-upload-${config.key}`}
+                          type="file"
+                          accept=".pdf"
+                          className="sr-only"
+                          onChange={(e) => handleFileChange(config.key, e.target.files?.[0] || null)}
+                        />
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-500 truncate w-32 mx-auto">
+                      {files[config.key] ? files[config.key]?.name : "Apenas PDF até 10MB"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="pt-6 border-t border-gray-200 flex justify-end">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="inline-flex justify-center items-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Enviando...
+              </>
+            ) : (
+              "Enviar Solicitação"
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
