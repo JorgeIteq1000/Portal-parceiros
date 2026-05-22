@@ -268,9 +268,20 @@ async function startServer() {
     }
   });
 
-  // Rota de Healthcheck
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+  // Rota de Healthcheck / Keep-Alive (Previne que o banco durma na conta Free)
+  app.get("/api/keep-alive", async (req, res) => {
+    try {
+      // Fazemos um ping super leve no banco de dados para contabilizar atividade
+      const { data, error } = await supabaseAdmin.from('partners').select('id').limit(1);
+      
+      if (error) throw error;
+      
+      console.log(`[API /api/keep-alive] Ping realizado com sucesso. Banco e servidor estão online.`);
+      res.status(200).json({ status: "ok", message: "Servidor e Supabase estão ativos!", timestamp: new Date().toISOString() });
+    } catch (err: any) {
+      console.error("[API /api/keep-alive] Falha ao conectar no Supabase:", err.message);
+      res.status(500).json({ status: "error", message: "Falha na conexão com o banco de dados." });
+    }
   });
 
   // Vite middleware for development

@@ -50,22 +50,22 @@ export default function AdminPartnerRegistration() {
     }
 
     try {
-      const response = await fetch("/api/partners", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('api-partners', {
+        body: {
           name,
           email: partnerEmail,
           password: partnerPassword,
           require_payment_proof: requirePaymentProof,
           authorized_courses: authorizedCourses
-        })
+        }
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Erro ao cadastrar");
+      if (error) {
+        throw new Error(error.message || "Erro ao cadastrar");
+      }
+      
+      if (!data?.success) {
+        throw new Error(data?.error || "Erro ao cadastrar");
       }
       
       console.log("[AdminPartnerRegistration] Parceiro cadastrado com sucesso!");

@@ -53,6 +53,8 @@ export default function AdminPartners() {
 
     try {
       const body: any = {
+        action: 'UPDATE',
+        id: editingPartner.id,
         require_payment_proof: editRequireProof,
         is_active: editIsActive
       };
@@ -60,14 +62,12 @@ export default function AdminPartners() {
       if (editEmail.trim()) body.email = editEmail.trim();
       if (editPassword.trim()) body.password = editPassword.trim();
 
-      const response = await fetch(`/api/partners/${editingPartner.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+      const { data, error } = await supabase.functions.invoke('api-partners', {
+        body
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Erro ao atualizar");
+      if (error) throw new Error(error.message || "Erro ao atualizar");
+      if (!data?.success) throw new Error(data?.error || "Erro ao atualizar");
 
       // Atualiza estado local
       setPartners(partners.map(p => p.id === editingPartner.id ? { 

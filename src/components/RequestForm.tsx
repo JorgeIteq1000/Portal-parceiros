@@ -95,17 +95,16 @@ export default function RequestForm({ partner }: RequestFormProps) {
     try {
       console.log(`[RequestForm] Enviando payload via FormData para /api/upload... (Total de chaves no form: ${Array.from(formData.keys()).length})`);
       
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData, // fetch define boundary e multipart/form-data automaticamente
+      const { data, error } = await supabase.functions.invoke('api-upload', {
+        body: formData
       });
 
-      console.log(`[RequestForm] Resposta recebida. Status: ${response.status}`);
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || "Falha ao enviar os dados.");
+      if (error) {
+        throw new Error(error.message || "Erro no servidor ao processar o envio.");
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.error || "Falha ao enviar os dados.");
       }
 
       console.log("[RequestForm] Upload concluído com sucesso:", data);
