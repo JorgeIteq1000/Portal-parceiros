@@ -1,15 +1,27 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { CourseType } from "../types";
 import { Building, CheckCircle, AlertCircle, Loader2, Save } from "lucide-react";
+import { supabase } from "../lib/supabase";
 
 export default function AdminPartnerRegistration() {
   const [name, setName] = useState("");
+  const [partnerEmail, setPartnerEmail] = useState("");
+  const [partnerPassword, setPartnerPassword] = useState("");
   const [requirePaymentProof, setRequirePaymentProof] = useState(false);
   const [authorizedCourses, setAuthorizedCourses] = useState<CourseType[]>([]);
+  const [availableCourses, setAvailableCourses] = useState<CourseType[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  const AVAILABLE_COURSES: CourseType[] = ["2ª Licenciatura", "Pós Graduação"];
+  useEffect(() => {
+    async function loadCourses() {
+      const { data, error } = await supabase.from('course_types').select('name').order('name');
+      if (data && !error) {
+        setAvailableCourses(data.map(c => c.name));
+      }
+    }
+    loadCourses();
+  }, []);
 
   const handleCourseToggle = (course: CourseType) => {
     setAuthorizedCourses((prev) =>
@@ -25,8 +37,8 @@ export default function AdminPartnerRegistration() {
     setSubmitStatus(null);
     console.log("[AdminPartnerRegistration] Tentativa de cadastro iniciada.");
 
-    if (!name.trim()) {
-      setSubmitStatus({ type: "error", message: "O nome do parceiro é obrigatório." });
+    if (!name.trim() || !partnerEmail.trim() || !partnerPassword.trim()) {
+      setSubmitStatus({ type: "error", message: "Nome, e-mail e senha são obrigatórios." });
       setIsSubmitting(false);
       return;
     }
@@ -38,24 +50,36 @@ export default function AdminPartnerRegistration() {
     }
 
     try {
-      // Simulação de chamada de API para salvar no Supabase
-      console.log("[AdminPartnerRegistration] Salvando no banco de dados...", {
-        name,
-        requirePaymentProof,
-        authorizedCourses,
+      const response = await fetch("/api/partners", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email: partnerEmail,
+          password: partnerPassword,
+          require_payment_proof: requirePaymentProof,
+          authorized_courses: authorizedCourses
+        })
       });
-      await new Promise((resolve) => setTimeout(resolve, 800)); // Simulando delay
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Erro ao cadastrar");
+      }
       
       console.log("[AdminPartnerRegistration] Parceiro cadastrado com sucesso!");
-      setSubmitStatus({ type: "success", message: "Parceiro cadastrado com sucesso!" });
+      setSubmitStatus({ type: "success", message: `Parceiro cadastrado com sucesso!` });
       
       // Reset do formulário
       setName("");
+      setPartnerEmail("");
+      setPartnerPassword("");
       setRequirePaymentProof(false);
       setAuthorizedCourses([]);
     } catch (error) {
       console.error("[AdminPartnerRegistration] Erro ao cadastrar:", error);
-      setSubmitStatus({ type: "error", message: "Ocorreu um erro ao cadastrar o parceiro. Tente novamente." });
+      setSubmitStatus({ type: "error", message: error instanceof Error ? error.message : "Ocorreu um erro ao cadastrar o parceiro." });
     } finally {
       setIsSubmitting(false);
     }
@@ -109,6 +133,37 @@ export default function AdminPartnerRegistration() {
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    E-mail de Acesso <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    required
+                    value={partnerEmail}
+                    onChange={(e) => setPartnerEmail(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                    placeholder="parceiro@exemplo.com"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                    Senha Provisória <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="password"
+                    type="password"
+                    required
+                    value={partnerPassword}
+                    onChange={(e) => setPartnerPassword(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                    placeholder="Senha para o parceiro"
+                  />
+                </div>
+              </div>
+
               <div className="flex items-center pt-2">
                 <input
                   id="requirePayment"
@@ -134,7 +189,9 @@ export default function AdminPartnerRegistration() {
               Selecione os tipos de certificações que este parceiro poderá solicitar:
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {AVAILABLE_COURSES.map((course) => (
+              {availableCourses.length === 0 ? (
+                <p className="text-sm text-gray-500 col-span-2">Nenhum tipo de curso cadastrado no sistema. Por favor, cadastre em "Gestão de Cursos" primeiro.</p>
+              ) : availableCourses.map((course) => (
                 <div
                   key={course}
                   onClick={() => handleCourseToggle(course)}

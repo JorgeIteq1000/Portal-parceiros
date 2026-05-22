@@ -27,11 +27,18 @@ export default function KanbanBoard({ initialRequests }: KanbanBoardProps) {
   const [draggedRequestId, setDraggedRequestId] = useState<string | null>(null);
   const [draggingOverStatus, setDraggingOverStatus] = useState<RequestStatus | null>(null);
 
-  const moveRequest = (id: string, newStatus: RequestStatus) => {
-    console.log(`[KanbanBoard] Movendo card ${id} para status: ${newStatus}`);
+  const moveRequest = async (id: string, newStatus: RequestStatus) => {
+    // Atualiza otimista
     setRequests(prev => prev.map(req => 
       req.id === id ? { ...req, status: newStatus } : req
     ));
+
+    // Atualiza no banco
+    const { supabase } = await import("../lib/supabase");
+    const { error } = await supabase.from('requests').update({ status: newStatus }).eq('id', id);
+    if (error) {
+       console.error("Erro ao atualizar status:", error);
+    }
   };
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
@@ -110,17 +117,30 @@ export default function KanbanBoard({ initialRequests }: KanbanBoardProps) {
                     }`}
                   >
                     
-                    <div className="flex items-start justify-between mb-2">
-                       <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
-                          <User className="w-4 h-4 text-gray-400" />
-                          {req.student_name}
+                     <div className="flex items-start justify-between mb-2">
+                       <div className="flex flex-col gap-1 w-full">
+                         <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                            <User className="w-4 h-4 text-gray-400" />
+                            {req.student_name}
+                         </div>
+                         {req.partners && (
+                           <div className="flex items-center gap-2 text-xs font-medium text-blue-700 bg-blue-50 w-fit px-2 py-0.5 rounded-md border border-blue-100">
+                             Polo: {req.partners.name}
+                           </div>
+                         )}
                        </div>
                     </div>
 
                     <div className="flex flex-col gap-1 mb-4">
-                      <div className="flex items-center text-xs text-gray-500">
-                        <FileText className="w-3.5 h-3.5 mr-1.5" />
-                        {req.course_type} | CPF: {req.student_cpf}
+                      <div className="flex flex-col text-xs text-gray-500 gap-0.5">
+                        <div className="flex items-center">
+                          <FileText className="w-3.5 h-3.5 mr-1.5 text-gray-400" />
+                          <span className="font-medium text-gray-700">{req.course_type}</span>
+                          {req.course && <span className="ml-1">- {req.course}</span>}
+                        </div>
+                        <div className="pl-5">
+                          CPF: {req.student_cpf}
+                        </div>
                       </div>
                       <div className="flex items-center text-xs text-gray-500">
                         <Calendar className="w-3.5 h-3.5 mr-1.5" />

@@ -1,36 +1,8 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { StudentRequest, CourseType, RequestStatus } from "../types";
 import { Clock, CheckCircle2, AlertCircle, FileText, Calendar, Search, Filter } from "lucide-react";
-
-const MOCK_PARTNER_REQUESTS: StudentRequest[] = [
-  {
-    id: "req_1",
-    partner_id: "partner_123_abc",
-    student_name: "Mariana Souza Santos",
-    student_cpf: "123.456.789-00",
-    course_type: "2ª Licenciatura",
-    status: "Pedido Enviado",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-  },
-  {
-    id: "req_2",
-    partner_id: "partner_123_abc",
-    student_name: "Roberto Campos",
-    student_cpf: "098.765.432-11",
-    course_type: "Pós Graduação",
-    status: "Recebimento Confirmado",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
-  },
-  {
-    id: "req_3",
-    partner_id: "partner_123_abc",
-    student_name: "Fernanda Lima",
-    student_cpf: "555.666.777-88",
-    course_type: "Pós Graduação",
-    status: "Em processo de emissão",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
-  }
-];
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../contexts/AuthContext";
 
 const STATUS_CONFIG: Record<RequestStatus, { icon: any, color: string, bg: string, border: string }> = {
   "Pedido Enviado": { icon: Clock, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-200" },
@@ -41,15 +13,33 @@ const STATUS_CONFIG: Record<RequestStatus, { icon: any, color: string, bg: strin
 };
 
 export default function PartnerRequests() {
-  console.log("[PartnerRequests] Renderizando acompanhamento com filtros.");
+  const { user, partnerData } = useAuth();
+  const [requests, setRequests] = useState<StudentRequest[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [courseFilter, setCourseFilter] = useState<CourseType | "ALL">("ALL");
   const [statusFilter, setStatusFilter] = useState<RequestStatus | "ALL">("ALL");
 
+  useEffect(() => {
+    async function fetchRequests() {
+      if (!user) return;
+      const { data, error } = await supabase
+        .from("requests")
+        .select("*")
+        .eq("partner_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (data && !error) {
+        setRequests(data as StudentRequest[]);
+      }
+      setLoading(false);
+    }
+    fetchRequests();
+  }, [user]);
+
   const filteredRequests = useMemo(() => {
-    return MOCK_PARTNER_REQUESTS.filter((req) => {
-      // Name / CPF search
+    return requests.filter((req) => {
       const normalizedSearch = searchTerm.toLowerCase();
       const documentRaw = req.student_cpf.replace(/\D/g, "");
       const searchRaw = searchTerm.replace(/\D/g, "");
@@ -58,13 +48,14 @@ export default function PartnerRequests() {
         req.student_name.toLowerCase().includes(normalizedSearch) ||
         (searchRaw && documentRaw.includes(searchRaw));
 
-      // Dropdown filters
       const matchCourse = courseFilter === "ALL" || req.course_type === courseFilter;
       const matchStatus = statusFilter === "ALL" || req.status === statusFilter;
 
       return matchSearch && matchCourse && matchStatus;
     });
-  }, [searchTerm, courseFilter, statusFilter]);
+  }, [requests, searchTerm, courseFilter, statusFilter]);
+
+  if (loading) return <div className="p-8 text-center">Carregando solicitações...</div>;
 
   return (
     <div className="space-y-6">
@@ -103,8 +94,9 @@ export default function PartnerRequests() {
               className="block w-full pl-9 pr-8 py-2 border border-gray-300 rounded-md bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="ALL">Todos os cursos</option>
-              <option value="2ª Licenciatura">2ª Licenciatura</option>
-              <option value="Pós Graduação">Pós Graduação</option>
+              {partnerData?.authorized_courses?.map((course: string) => (
+                <option key={course} value={course}>{course}</option>
+              ))}
             </select>
           </div>
 

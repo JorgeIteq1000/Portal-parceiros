@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Upload, FileType, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { maskCPF } from "../lib/utils";
 
+import { supabase } from "../lib/supabase";
+
 import { CourseType, Partner } from "../types";
 
 interface RequestFormProps {
@@ -12,6 +14,10 @@ export default function RequestForm({ partner }: RequestFormProps) {
   const [studentName, setStudentName] = useState("");
   const [studentCpf, setStudentCpf] = useState("");
   const [courseType, setCourseType] = useState<CourseType | "">("");
+  const [course, setCourse] = useState("");
+  const [availableCourses, setAvailableCourses] = useState<{ id: string, name: string, course_type_id: string }[]>([]);
+  const [courseTypesMap, setCourseTypesMap] = useState<Record<string, string>>({});
+  
   const [files, setFiles] = useState<{ [key: string]: File | null }>({
     civilRegistry: null, // Certidão de nascimento/casamento
     identity: null, // RG e CPF
@@ -28,6 +34,25 @@ export default function RequestForm({ partner }: RequestFormProps) {
     setFiles((prev) => ({ ...prev, [key]: file }));
   };
 
+  React.useEffect(() => {
+    async function loadData() {
+      const [typesRes, coursesRes] = await Promise.all([
+        supabase.from('course_types').select('id, name'),
+        supabase.from('courses').select('id, name, course_type_id')
+      ]);
+
+      if (typesRes.data) {
+        const map: Record<string, string> = {};
+        typesRes.data.forEach(t => map[t.name] = t.id);
+        setCourseTypesMap(map);
+      }
+      if (coursesRes.data) {
+        setAvailableCourses(coursesRes.data);
+      }
+    }
+    loadData();
+  }, []);
+
   const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setStudentCpf(maskCPF(e.target.value));
   };
@@ -39,7 +64,7 @@ export default function RequestForm({ partner }: RequestFormProps) {
     setSubmitStatus(null);
 
     // Validação básica
-    if (!studentName.trim() || studentCpf.length < 14 || !courseType) {
+    if (!studentName.trim() || studentCpf.length < 14 || !courseType || !course) {
       console.warn("[RequestForm] Validação local falhou (nome, CPF ou curso incompleto).");
       setSubmitStatus({ type: "error", message: "Por favor, preencha todos os campos obrigatórios." });
       setIsSubmitting(false);
@@ -50,6 +75,7 @@ export default function RequestForm({ partner }: RequestFormProps) {
     formData.append("student_name", studentName);
     formData.append("student_cpf", studentCpf);
     formData.append("course_type", courseType);
+    formData.append("course", course);
     formData.append("partner_id", partner.id);
 
     // Anexa arquivos. Pula o comprovante de pagamento se não for obrigatório e não foi anexado.
@@ -89,6 +115,7 @@ export default function RequestForm({ partner }: RequestFormProps) {
       setStudentName("");
       setStudentCpf("");
       setCourseType("");
+      setCourse("");
       setFiles({
         civilRegistry: null, identity: null, addressProof: null,
         previousDegree: null, previousTranscript: null, highSchoolTranscript: null, paymentProof: null,
@@ -178,12 +205,36 @@ export default function RequestForm({ partner }: RequestFormProps) {
               id="courseType"
               required
               value={courseType}
-              onChange={(e) => setCourseType(e.target.value as CourseType)}
+              onChange={(e) => {
+                setCourseType(e.target.value);
+                setCourse(""); // Limpa o curso ao trocar o tipo
+              }}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
             >
+              <option value="" disabled>Selecione um tipo...</option>
+              {partner.authorized_courses?.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="course" className="block text-sm font-medium text-gray-700">
+              Curso <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="course"
+              required
+              disabled={!courseType}
+              value={course}
+              onChange={(e) => setCourse(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-500"
+            >
               <option value="" disabled>Selecione um curso...</option>
-              {partner.authorized_courses?.map((course) => (
-                <option key={course} value={course}>{course}</option>
+              {courseType && availableCourses
+                .filter(c => c.course_type_id === courseTypesMap[courseType])
+                .map((c) => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
               ))}
             </select>
           </div>
