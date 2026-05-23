@@ -1,12 +1,13 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
-import { LayoutDashboard, FilePlus, List, Building, LogOut, BookOpen } from "lucide-react";
+import { LayoutDashboard, FilePlus, List, Building, LogOut, BookOpen, Code } from "lucide-react";
 import AdminDashboard from "./pages/AdminDashboard";
 import PartnerDashboard from "./pages/PartnerDashboard";
 import PartnerRequests from "./pages/PartnerRequests";
 import AdminPartnerRegistration from "./pages/AdminPartnerRegistration";
 import AdminPartners from "./pages/AdminPartners";
 import AdminCourses from "./pages/AdminCourses";
+import PartnerApiDocs from "./pages/PartnerApiDocs";
 import Login from "./pages/Login";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
@@ -48,6 +49,17 @@ function Navigation() {
                   >
                     <List className="w-4 h-4 mr-2" />
                     Acompanhar
+                  </Link>
+                  <Link
+                    to="/partner/api"
+                    className={`${
+                      location.pathname === "/partner/api"
+                        ? "border-blue-500 text-gray-900"
+                        : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                    } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
+                  >
+                    <Code className="w-4 h-4 mr-2" />
+                    API
                   </Link>
                 </>
               )}
@@ -142,6 +154,7 @@ function AppRoutes() {
           {/* Rotas de Parceiro */}
           <Route path="/" element={<ProtectedRoute allowedRole="partner"><PartnerDashboard /></ProtectedRoute>} />
           <Route path="/requests" element={<ProtectedRoute allowedRole="partner"><PartnerRequests /></ProtectedRoute>} />
+          <Route path="/partner/api" element={<ProtectedRoute allowedRole="partner"><PartnerApiDocs /></ProtectedRoute>} />
           
           {/* Rotas de Admin */}
           <Route path="/admin" element={<ProtectedRoute allowedRole="admin"><AdminDashboard /></ProtectedRoute>} />

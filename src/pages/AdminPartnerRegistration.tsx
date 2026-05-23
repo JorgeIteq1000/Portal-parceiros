@@ -8,6 +8,7 @@ export default function AdminPartnerRegistration() {
   const [partnerEmail, setPartnerEmail] = useState("");
   const [partnerPassword, setPartnerPassword] = useState("");
   const [requirePaymentProof, setRequirePaymentProof] = useState(false);
+  const [affiliation, setAffiliation] = useState("");
   const [authorizedCourses, setAuthorizedCourses] = useState<CourseType[]>([]);
   const [availableCourses, setAvailableCourses] = useState<CourseType[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,6 +56,7 @@ export default function AdminPartnerRegistration() {
           name,
           email: partnerEmail,
           password: partnerPassword,
+          affiliation,
           require_payment_proof: requirePaymentProof,
           authorized_courses: authorizedCourses
         }
@@ -75,6 +77,7 @@ export default function AdminPartnerRegistration() {
       setName("");
       setPartnerEmail("");
       setPartnerPassword("");
+      setAffiliation("");
       setRequirePaymentProof(false);
       setAuthorizedCourses([]);
     } catch (error) {
@@ -162,6 +165,25 @@ export default function AdminPartnerRegistration() {
                     placeholder="Senha para o parceiro"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="affiliation" className="block text-sm font-medium text-gray-700">
+                  Parceria com <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="affiliation"
+                  required
+                  value={affiliation}
+                  onChange={(e) => setAffiliation(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                >
+                  <option value="" disabled>Selecione a Faculdade</option>
+                  <option value="Faculdade do Estado de São Paulo">Faculdade do Estado de São Paulo</option>
+                  <option value="Faculdade Alpha Channel">Faculdade Alpha Channel</option>
+                  <option value="Faculdade UCEESP">Faculdade UCEESP</option>
+                  <option value="Faculdade ITEQ">Faculdade ITEQ</option>
+                </select>
               </div>
 
               <div className="flex items-center pt-2">

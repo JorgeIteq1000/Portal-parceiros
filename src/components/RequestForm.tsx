@@ -15,7 +15,7 @@ export default function RequestForm({ partner }: RequestFormProps) {
   const [studentCpf, setStudentCpf] = useState("");
   const [courseType, setCourseType] = useState<CourseType | "">("");
   const [course, setCourse] = useState("");
-  const [availableCourses, setAvailableCourses] = useState<{ id: string, name: string, course_type_id: string }[]>([]);
+  const [availableCourses, setAvailableCourses] = useState<{ id: string, name: string, course_type_id: string, enable_grades: boolean, enable_professors: boolean, subjects: string[] }[]>([]);
   const [courseTypesMap, setCourseTypesMap] = useState<Record<string, string>>({});
   
   const [files, setFiles] = useState<{ [key: string]: File | null }>({
@@ -30,6 +30,10 @@ export default function RequestForm({ partner }: RequestFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [academicRecord, setAcademicRecord] = useState<Record<string, { grade: string, professor: string }>>({});
+
   const handleFileChange = (key: string, file: File | null) => {
     setFiles((prev) => ({ ...prev, [key]: file }));
   };
@@ -38,7 +42,7 @@ export default function RequestForm({ partner }: RequestFormProps) {
     async function loadData() {
       const [typesRes, coursesRes] = await Promise.all([
         supabase.from('course_types').select('id, name'),
-        supabase.from('courses').select('id, name, course_type_id')
+        supabase.from('courses').select('id, name, course_type_id, enable_grades, enable_professors, subjects')
       ]);
 
       if (typesRes.data) {
@@ -64,11 +68,29 @@ export default function RequestForm({ partner }: RequestFormProps) {
     setSubmitStatus(null);
 
     // Validação básica
-    if (!studentName.trim() || studentCpf.length < 14 || !courseType || !course) {
-      console.warn("[RequestForm] Validação local falhou (nome, CPF ou curso incompleto).");
+    if (!studentName.trim() || studentCpf.length < 14 || !courseType || !course || !startDate || !endDate) {
+      console.warn("[RequestForm] Validação local falhou (nome, CPF, curso ou datas incompletas).");
       setSubmitStatus({ type: "error", message: "Por favor, preencha todos os campos obrigatórios." });
       setIsSubmitting(false);
       return;
+    }
+
+    const selectedCourseObj = availableCourses.find(c => c.name === course && c.course_type_id === courseTypesMap[courseType]);
+
+    if (selectedCourseObj?.enable_grades) {
+      for (const subject of selectedCourseObj.subjects) {
+        const record = academicRecord[subject];
+        if (!record?.grade) {
+          setSubmitStatus({ type: "error", message: `Por favor, preencha a nota da disciplina: ${subject}` });
+          setIsSubmitting(false);
+          return;
+        }
+        if (selectedCourseObj.enable_professors && !record?.professor?.trim()) {
+          setSubmitStatus({ type: "error", message: `Por favor, informe o nome do professor da disciplina: ${subject}` });
+          setIsSubmitting(false);
+          return;
+        }
+      }
     }
 
     const formData = new FormData();
@@ -77,6 +99,17 @@ export default function RequestForm({ partner }: RequestFormProps) {
     formData.append("course_type", courseType);
     formData.append("course", course);
     formData.append("partner_id", partner.id);
+    formData.append("start_date", startDate);
+    formData.append("end_date", endDate);
+
+    if (selectedCourseObj?.enable_grades) {
+      const recordArray = selectedCourseObj.subjects.map(sub => ({
+        subject: sub,
+        grade: academicRecord[sub]?.grade || "",
+        professor: selectedCourseObj.enable_professors ? (academicRecord[sub]?.professor || "") : undefined
+      }));
+      formData.append("academic_record", JSON.stringify(recordArray));
+    }
 
     // Anexa arquivos. Pula o comprovante de pagamento se não for obrigatório e não foi anexado.
     for (const [key, file] of Object.entries(files)) {
@@ -115,6 +148,9 @@ export default function RequestForm({ partner }: RequestFormProps) {
       setStudentCpf("");
       setCourseType("");
       setCourse("");
+      setStartDate("");
+      setEndDate("");
+      setAcademicRecord({});
       setFiles({
         civilRegistry: null, identity: null, addressProof: null,
         previousDegree: null, previousTranscript: null, highSchoolTranscript: null, paymentProof: null,
@@ -226,7 +262,10 @@ export default function RequestForm({ partner }: RequestFormProps) {
               required
               disabled={!courseType}
               value={course}
-              onChange={(e) => setCourse(e.target.value)}
+              onChange={(e) => {
+                setCourse(e.target.value);
+                setAcademicRecord({}); // Limpa as notas ao trocar o curso
+              }}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-500"
             >
               <option value="" disabled>Selecione um curso...</option>
@@ -237,7 +276,91 @@ export default function RequestForm({ partner }: RequestFormProps) {
               ))}
             </select>
           </div>
+
+          <div className="space-y-2">
+            <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">
+              Data de Início <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="startDate"
+              type="date"
+              required
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">
+              Data de Conclusão <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="endDate"
+              type="date"
+              required
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+            />
+          </div>
         </div>
+
+        {/* Grade Curricular Dinâmica */}
+        {(() => {
+          const selectedCourseObj = availableCourses.find(c => c.name === course && c.course_type_id === courseTypesMap[courseType]);
+          if (!selectedCourseObj?.enable_grades || !selectedCourseObj.subjects || selectedCourseObj.subjects.length === 0) return null;
+
+          return (
+            <div className="pt-6 border-t border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Grade Curricular</h3>
+              <p className="text-sm text-gray-500 mb-4">Preencha as notas e professores (se aplicável) de cada disciplina.</p>
+              
+              <div className="space-y-3">
+                {selectedCourseObj.subjects.map(subject => (
+                  <div key={subject} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center bg-gray-50 p-3 rounded-md border border-gray-100">
+                    <div className="md:col-span-4 font-medium text-sm text-gray-700 break-words">
+                      {subject}
+                    </div>
+                    
+                    <div className="md:col-span-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="10"
+                        placeholder="Nota"
+                        required
+                        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500"
+                        value={academicRecord[subject]?.grade || ""}
+                        onChange={(e) => setAcademicRecord(prev => ({
+                          ...prev,
+                          [subject]: { ...prev[subject], grade: e.target.value }
+                        }))}
+                      />
+                    </div>
+
+                    {selectedCourseObj.enable_professors && (
+                      <div className="md:col-span-6">
+                        <input
+                          type="text"
+                          placeholder="Nome do Professor"
+                          required
+                          className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500"
+                          value={academicRecord[subject]?.professor || ""}
+                          onChange={(e) => setAcademicRecord(prev => ({
+                            ...prev,
+                            [subject]: { ...prev[subject], professor: e.target.value }
+                          }))}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="pt-6 border-t border-gray-200">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Documentação (Upload)</h3>

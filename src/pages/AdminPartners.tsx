@@ -12,27 +12,34 @@ export default function AdminPartners() {
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [editEmail, setEditEmail] = useState("");
   const [editPassword, setEditPassword] = useState("");
+  const [editAffiliation, setEditAffiliation] = useState("");
   const [editRequireProof, setEditRequireProof] = useState(false);
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editAuthorizedCourses, setEditAuthorizedCourses] = useState<string[]>([]);
+  const [availableCourses, setAvailableCourses] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchPartners();
+    fetchInitialData();
   }, []);
 
-  async function fetchPartners() {
+  async function fetchInitialData() {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('partners')
-        .select('*')
-        .order('name');
+      const [partnersRes, coursesRes] = await Promise.all([
+        supabase.from('partners').select('*').order('name'),
+        supabase.from('course_types').select('name').order('name')
+      ]);
       
-      if (error) throw error;
-      setPartners(data || []);
+      if (partnersRes.error) throw partnersRes.error;
+      
+      setPartners(partnersRes.data || []);
+      if (coursesRes.data) {
+        setAvailableCourses(coursesRes.data.map(c => c.name));
+      }
     } catch (err: any) {
       console.error(err);
-      setError("Erro ao carregar parceiros.");
+      setError("Erro ao carregar dados.");
     } finally {
       setLoading(false);
     }
@@ -42,8 +49,10 @@ export default function AdminPartners() {
     setEditingPartner(partner);
     setEditEmail(""); // Fica vazio para indicar "não mudar"
     setEditPassword(""); // Fica vazio para indicar "não mudar"
+    setEditAffiliation(partner.affiliation || "");
     setEditRequireProof(partner.require_payment_proof);
     setEditIsActive(partner.is_active !== false); // Se for nulo, assumimos true
+    setEditAuthorizedCourses(partner.authorized_courses || []);
   };
 
   const handleUpdatePartner = async (e: React.FormEvent) => {
@@ -56,24 +65,35 @@ export default function AdminPartners() {
         action: 'UPDATE',
         id: editingPartner.id,
         require_payment_proof: editRequireProof,
-        is_active: editIsActive
+        is_active: editIsActive,
+        authorized_courses: editAuthorizedCourses
       };
 
       if (editEmail.trim()) body.email = editEmail.trim();
       if (editPassword.trim()) body.password = editPassword.trim();
+      if (editAffiliation) body.affiliation = editAffiliation;
 
-      const { data, error } = await supabase.functions.invoke('api-partners', {
+      const response = await supabase.functions.invoke('api-partners', {
         body
       });
 
-      if (error) throw new Error(error.message || "Erro ao atualizar");
-      if (!data?.success) throw new Error(data?.error || "Erro ao atualizar");
+      if (response.error) {
+        // Se a function retornar um erro de rede ou 400
+        const errMsg = response.error.context?.error || response.error.message || "Erro ao atualizar";
+        throw new Error(errMsg);
+      }
+      
+      const { data } = response;
+      if (!data?.success) throw new Error(data?.error || "Erro interno ao atualizar");
 
       // Atualiza estado local
       setPartners(partners.map(p => p.id === editingPartner.id ? { 
         ...p, 
+        email: editEmail.trim() || p.email,
+        affiliation: editAffiliation || p.affiliation,
         require_payment_proof: editRequireProof, 
-        is_active: editIsActive 
+        is_active: editIsActive,
+        authorized_courses: editAuthorizedCourses
       } : p));
 
       setEditingPartner(null);
@@ -125,8 +145,16 @@ export default function AdminPartners() {
               ) : (
                 partners.map((partner) => (
                   <tr key={partner.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {partner.name}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{partner.name}</div>
+                      {partner.email && (
+                        <div className="text-sm text-gray-500">{partner.email}</div>
+                      )}
+                      {partner.affiliation && (
+                        <div className="text-xs mt-1 inline-block bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                          Parceria: {partner.affiliation}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {partner.is_active !== false ? (
@@ -167,7 +195,7 @@ export default function AdminPartners() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setEditingPartner(null)}></div>
           <div className="bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:max-w-lg w-full relative z-10">
-              <form onSubmit={handleUpdatePartner}>
+              <form onSubmit={handleUpdatePartner} autoComplete="off">
                 <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                   <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
                     Editar Parceiro: <span className="text-blue-600">{editingPartner.name}</span>
@@ -181,6 +209,7 @@ export default function AdminPartners() {
                         value={editEmail}
                         onChange={e => setEditEmail(e.target.value)}
                         placeholder="Deixe em branco para não alterar"
+                        autoComplete="off"
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                       />
                     </div>
@@ -191,8 +220,24 @@ export default function AdminPartners() {
                         value={editPassword}
                         onChange={e => setEditPassword(e.target.value)}
                         placeholder="Deixe em branco para não alterar"
+                        autoComplete="new-password"
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Parceria com</label>
+                      <select 
+                        value={editAffiliation}
+                        onChange={e => setEditAffiliation(e.target.value)}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white"
+                      >
+                        <option value="">Não especificado</option>
+                        <option value="Faculdade do Estado de São Paulo">Faculdade do Estado de São Paulo</option>
+                        <option value="Faculdade Alpha Channel">Faculdade Alpha Channel</option>
+                        <option value="Faculdade UCEESP">Faculdade UCEESP</option>
+                        <option value="Faculdade ITEQ">Faculdade ITEQ</option>
+                      </select>
                     </div>
                     
                     <div className="pt-2">
@@ -217,6 +262,31 @@ export default function AdminPartners() {
                         />
                         <span className="ml-2 text-sm text-gray-900">Exigir Comprovante de Pagamento</span>
                       </label>
+                    </div>
+
+                    <div className="pt-2 border-t mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Cursos Autorizados</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                        {availableCourses.length === 0 ? (
+                          <span className="text-sm text-gray-500">Nenhum curso cadastrado no sistema.</span>
+                        ) : availableCourses.map(course => (
+                          <label key={course} className="flex items-center text-sm cursor-pointer p-2 hover:bg-gray-50 rounded border border-gray-100">
+                            <input 
+                              type="checkbox"
+                              checked={editAuthorizedCourses.includes(course)}
+                              onChange={e => {
+                                setEditAuthorizedCourses(prev => 
+                                  e.target.checked 
+                                    ? [...prev, course] 
+                                    : prev.filter(c => c !== course)
+                                );
+                              }}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-2"
+                            />
+                            {course}
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
