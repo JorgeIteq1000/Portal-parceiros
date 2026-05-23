@@ -10,3 +10,4 @@ drive-credentials.json
 test-*.cjs
 seed-admin.ts
 server.ts
+drive-credentials.json
